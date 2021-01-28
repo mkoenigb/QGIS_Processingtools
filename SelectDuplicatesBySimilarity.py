@@ -34,7 +34,7 @@ class SelectDuplicatesBySimilarity(QgsProcessingAlgorithm):
                     'Levenshtein Distance',
                     'Longest Common Substring',
                     'Hamming Distance'],
-                    allowMultiple=True,defaultValue=[0,1,2]))
+                    allowMultiple=True,defaultValue=[1]))
         self.addParameter(
             QgsProcessingParameterEnum(
                 self.ANDORALG, self.tr('Choose if all selected algorithms need to fulfill criteria or only at least one'),['All','Only at least one'],defaultValue=0))
