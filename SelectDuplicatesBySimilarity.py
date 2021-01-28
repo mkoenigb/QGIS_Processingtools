@@ -72,19 +72,19 @@ class SelectDuplicatesBySimilarity(QgsProcessingAlgorithm):
                                 s0 = 1
                             else: s0 = 0
                         if 1 in alg: # Soundex
-                            if QgsStringUtils.soundex(feat[field]) == QgsStringUtils.soundex(lookup[field]):
+                            if QgsStringUtils.soundex(str(feat[field])) == QgsStringUtils.soundex(str(lookup[field])):
                                 s1 = 1
                             else: s1 = 0
                         if 2 in alg: # Levenshtein
-                            if QgsStringUtils.levenshteinDistance(feat[field],lookup[field]) < th:
+                            if QgsStringUtils.levenshteinDistance(str(feat[field]),str(lookup[field])) < th:
                                 s2 = 1
                             else: s2 = 0
                         if 3 in alg: # Longest Common Substring
-                            if len(QgsStringUtils.longestCommonSubstring(feat[field],lookup[field])) > th:
+                            if len(QgsStringUtils.longestCommonSubstring(str(feat[field]),str(lookup[field]))) > th:
                                 s3 = 1
                             else: s3 = 0
                         if 4 in alg: # Hamming Distance:
-                            if QgsStringUtils.hammingDistance(feat[field],lookup[field]) > th:
+                            if QgsStringUtils.hammingDistance(str(feat[field]),str(lookup[field])) > th:
                                 s4 = 1  
                             else: s4 = 0
                             
