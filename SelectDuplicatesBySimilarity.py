@@ -133,7 +133,7 @@ class SelectDuplicatesBySimilarity(QgsProcessingAlgorithm):
         'This Algorithm selects possible duplicate features by their similarity. The first feature (ordered by feature id) in each group is NOT beeing selected. '
         'You can choose between the following algorithms, and can also combine them: \n'
         '- Exact Match: Matches if the attribue values are exactly the same \n'
-        '- Soundex: Matches by sound, as pronounced in English both values are equal \n '
+        '- Soundex: Matches by sound, as pronounced in English if both results are equal \n '
         '- Levenshtein Distance: Matches if by measuring the difference between two sequences is lower than the threshold\n '
         '- Longest Common Substring: Matches if the longest string that is a substring of compared value and greater than the threshold \n'
         '- Hamming Distance: Matches if between two strings of equal length the number of positions at which the corresponding symbols are greater than the threshold \n '
