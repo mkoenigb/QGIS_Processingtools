@@ -120,7 +120,7 @@ class SelectDuplicatesBySimilarity(QgsProcessingAlgorithm):
         return 'SelectDuplicatesBySimilarity'
 
     def displayName(self):
-        return self.tr('Select duplicate features by similarity')
+        return self.tr('Select possible duplicate features by similarity (attribute and distance)')
 
     def group(self):
         return self.tr('FROM GISSE')
