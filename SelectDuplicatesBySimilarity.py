@@ -11,7 +11,9 @@ class SelectDuplicatesBySimilarity(QgsProcessingAlgorithm):
     MAX_DISTANCE = 'MAX_DISTANCE'
     ALGORITHM = 'ALGORITHM'
     ANDORALG = 'ANDORALG'
-    THRESHOLD = 'THRESHOLD'
+    THRESHOLD_LEVENSHTEIN = 'THRESHOLD_LEVENSHTEIN'
+    THRESHOLD_SUBSTRING = 'THRESHOLD_SUBSTRING'
+    THRESHOLD_HAMMING = 'THRESHOLD_HAMMING'
     OPERATOR = 'OPERATOR'
     OUTPUT = 'OUTPUT'
 
@@ -40,7 +42,13 @@ class SelectDuplicatesBySimilarity(QgsProcessingAlgorithm):
                 self.ANDORALG, self.tr('Choose if all selected algorithms need to fulfill criteria or only at least one'),['All','Only at least one'],defaultValue=0))
         self.addParameter(
             QgsProcessingParameterNumber(
-                self.THRESHOLD, self.tr('Choose a Threshold for these three algorithms: \nLevenshtein < Threshold \nLongest Common Substring > Threshold \nHamming Distance > Threshold'),0,5))
+                self.THRESHOLD_LEVENSHTEIN, self.tr('Choose a Threshold for Levenshtein < Threshold'),0,None,True,0))
+        self.addParameter(
+            QgsProcessingParameterNumber(
+                self.THRESHOLD_SUBSTRING, self.tr('Choose a Threshold for Longest Common Substring > (Length of Attributevalue - Threshold)'),0,None,True,0))
+        self.addParameter(
+            QgsProcessingParameterNumber(
+                self.THRESHOLD_HAMMING, self.tr('Choose a Threshold for Hamming Distance > (Length of Attributevalue - Threshold)'),0,None,True,0))
         self.addOutput(QgsProcessingOutputVectorLayer(self.OUTPUT, self.tr('Possible Duplicates')))
 
     def processAlgorithm(self, parameters, context, feedback):
@@ -48,14 +56,17 @@ class SelectDuplicatesBySimilarity(QgsProcessingAlgorithm):
         layer = self.parameterAsLayer(parameters, self.SOURCE_LYR, context)
         field = self.parameterAsString(parameters, self.SOURCE_FIELD, context)
         maxdist = self.parameterAsDouble(parameters, self.MAX_DISTANCE, context)
-        th = self.parameterAsInt(parameters, self.THRESHOLD, context)
+        th_levenshtein = self.parameterAsInt(parameters, self.THRESHOLD_LEVENSHTEIN, context)
+        th_substring = self.parameterAsInt(parameters, self.THRESHOLD_SUBSTRING, context)
+        th_hamming = self.parameterAsInt(parameters, self.THRESHOLD_HAMMING, context)
         alg = self.parameterAsEnums(parameters, self.ALGORITHM, context)
         ao = self.parameterAsInt(parameters, self.ANDORALG, context)
         op = self.parameterAsString(parameters, self.OPERATOR, context)
         
         total = 100.0 / layer.featureCount() if layer.featureCount() else 0 # Initialize progress for progressbar
         
-        layer.removeSelection()
+        layer.removeSelection() # clear selection before every run
+        #totalfeatcount = layer.featureCount()
         
         for current, feat in enumerate(layer.getFeatures()): # iterate over source 
             s = None # reset selection indicator
@@ -64,49 +75,61 @@ class SelectDuplicatesBySimilarity(QgsProcessingAlgorithm):
             s2 = None
             s3 = None
             s4 = None
-            for lookup in layer.getFeatures():  # compare to every feature of same layer
-                if feat.id() > lookup.id(): # only compare if not already done so
-                    if feat.geometry().centroid().distance(lookup.geometry().centroid()) <= maxdist: # only select if within given maxdistance
-                        if 0 in alg: # Exact Duplicates
-                            if feat[field] == lookup[field]:
-                                s0 = 1
-                            else: s0 = 0
-                        if 1 in alg: # Soundex
-                            if QgsStringUtils.soundex(str(feat[field])) == QgsStringUtils.soundex(str(lookup[field])):
-                                s1 = 1
-                            else: s1 = 0
-                        if 2 in alg: # Levenshtein
-                            if QgsStringUtils.levenshteinDistance(str(feat[field]),str(lookup[field])) < th:
-                                s2 = 1
-                            else: s2 = 0
-                        if 3 in alg: # Longest Common Substring
-                            if len(QgsStringUtils.longestCommonSubstring(str(feat[field]),str(lookup[field]))) > th:
-                                s3 = 1
-                            else: s3 = 0
-                        if 4 in alg: # Hamming Distance:
-                            if QgsStringUtils.hammingDistance(str(feat[field]),str(lookup[field])) > th:
-                                s4 = 1  
-                            else: s4 = 0
-                            
-                        if ao == 0: # All chosen algorithms need to match
-                            if 0 in (s0, s1, s2, s3, s4): # Dont select current feature if at least one used algorithm returned 0
-                                s = 0
-                            else: # Select current feature if all algorithms returned 1 or None
-                                s = 1
-                        elif ao == 1: # Only at least one algorithm needs to match
-                            if 1 in (s0, s1, s2, s3, s4): # Select current feature if at least one used algorithm returned 1
-                                s = 1
-                            else: # Dont select current feature if no used algorithm returned 1
-                                s = 0
+            # recalc thresholds based on current attribute values
+            th_levenshtein_new = th_levenshtein
+            th_substring_new  = th_substring
+            th_hamming_new = th_hamming
+            if feat[field] is not None and len(str(feat[field])) > 0: # only compare if field is not empty
+                if th_levenshtein_new < 0: # set to 0 if it would be negative
+                    th_levenshtein_new = 0
+                    th_substring_new = len(str(feat[field])) - th_substring
+                if th_substring_new < 0: # set to 0 if it would be negative
+                    th_substring_new = 0
+                th_hamming_new = len(str(feat[field])) - th_hamming
+                if th_hamming_new < 0: # set to 0 if it would be negative
+                    th_hamming_new = 0            
+                for lookupnr in range(1,feat.id(),1): # only compare to previous features, because we do not want to select the first feature of each duplicate group
+                    lookup = layer.getFeature(lookupnr) # get the lookup-feature
+                    if lookup[field] is not None and len(str(lookup[field])) > 0: # only compare if field is not empty
+                        if feat.geometry().centroid().distance(lookup.geometry().centroid()) <= maxdist: # only select if within given maxdistance
+                            if 0 in alg: # Exact Duplicates
+                                if feat[field] == lookup[field]:
+                                    s0 = 1
+                                else: s0 = 0
+                            if 1 in alg: # Soundex
+                                if QgsStringUtils.soundex(str(feat[field])) == QgsStringUtils.soundex(str(lookup[field])):
+                                    s1 = 1
+                                else: s1 = 0
+                            if 2 in alg: # Levenshtein
+                                if QgsStringUtils.levenshteinDistance(str(feat[field]),str(lookup[field])) < th_levenshtein_new:
+                                    s2 = 1
+                                else: s2 = 0
+                            if 3 in alg: # Longest Common Substring
+                                if len(QgsStringUtils.longestCommonSubstring(str(feat[field]),str(lookup[field]))) > th_substring_new:
+                                    s3 = 1
+                                else: s3 = 0
+                            if 4 in alg: # Hamming Distance:
+                                if QgsStringUtils.hammingDistance(str(feat[field]),str(lookup[field])) > th_hamming_new:
+                                    s4 = 1  
+                                else: s4 = 0
                                 
-                        if s == 1: # select the current feature if indicator is true
-                            layer.select(feat.id())
+                            if ao == 0: # All chosen algorithms need to match
+                                if 0 in (s0, s1, s2, s3, s4): # Dont select current feature if at least one used algorithm returned 0
+                                    s = 0
+                                else: # Select current feature if all algorithms returned 1 or None
+                                    s = 1
+                            elif ao == 1: # Only at least one algorithm needs to match
+                                if 1 in (s0, s1, s2, s3, s4): # Select current feature if at least one used algorithm returned 1
+                                    s = 1
+                                else: # Dont select current feature if no used algorithm returned 1
+                                    s = 0
+                                    
+                            if s == 1: # select the current feature if indicator is true
+                                layer.select(feat.id())
                             
-                        
-            
+                if feedback.isCanceled(): # Cancel algorithm if button is pressed
+                    break
             feedback.setProgress(int(current * total)) # Set Progress in Progressbar
-            if feedback.isCanceled(): # Cancel algorithm if button is pressed
-                break
 
         return {self.OUTPUT: parameters[self.SOURCE_LYR]} # Return result of algorithm
 
