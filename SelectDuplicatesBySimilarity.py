@@ -75,14 +75,15 @@ class SelectDuplicatesBySimilarity(QgsProcessingAlgorithm):
             s2 = None
             s3 = None
             s4 = None
-            # recalc thresholds based on current attribute values
             th_levenshtein_new = th_levenshtein
             th_substring_new  = th_substring
             th_hamming_new = th_hamming
             if feat[field] is not None and len(str(feat[field])) > 0: # only compare if field is not empty
+                # recalc thresholds based on current attribute values
+                th_levenshtein_new = th_levenshtein_new
                 if th_levenshtein_new < 0: # set to 0 if it would be negative
                     th_levenshtein_new = 0
-                    th_substring_new = len(str(feat[field])) - th_substring
+                th_substring_new = len(str(feat[field])) - th_substring
                 if th_substring_new < 0: # set to 0 if it would be negative
                     th_substring_new = 0
                 th_hamming_new = len(str(feat[field])) - th_hamming
