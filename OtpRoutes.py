@@ -2,7 +2,7 @@
 # License: GNU General Public License v3.0
 # Version 1.0
 # Date: 2021-02-27
-# Tested with: QGIS 3.4.15 and QGIS 3.18.0
+# Tested with: QGIS 3.4.15 and QGIS 3.18.0 (recommend 3.18, as at least 3.4 crashes sometimes without any reason or error message, but works on the same data and same settings perfectly when trying another time)
 
 from PyQt5.QtCore import QCoreApplication, QVariant
 from qgis.core import (QgsField, QgsFeature, QgsProcessing, QgsExpression, QgsGeometry, QgsPoint, QgsFields, QgsWkbTypes, QgsCoordinateReferenceSystem, QgsDateTimeFieldFormatter,
