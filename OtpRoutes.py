@@ -2,6 +2,7 @@
 # License: GNU General Public License v3.0
 # Version 1.0
 # Date: 2021-02-27
+# Tested with: QGIS 3.4.15 and QGIS 3.18.0
 
 from PyQt5.QtCore import QCoreApplication, QVariant
 from qgis.core import (QgsField, QgsFeature, QgsProcessing, QgsExpression, QgsGeometry, QgsPoint, QgsFields, QgsWkbTypes, QgsCoordinateReferenceSystem, QgsDateTimeFieldFormatter,
@@ -233,14 +234,27 @@ class OtpRoutes(QgsProcessingAlgorithm):
         
             route_relationid += 1
             
+            # Making Script compatible with earlier versions than QGIS 3.18: If date or time field is a string, do not convert it to a string...
+            use_date = ''
+            use_time = ''
+            try:
+                use_date = str(source_feature[date_field].toString('yyyy-MM-dd'))
+            except:
+                use_date = str(source_feature[date_field])
+            try:
+                use_time = str(source_feature[time_field].toString('HH:mm:ss'))
+            except:
+                use_time = str(source_feature[time_field])
+            
+            # Create URL for current feature
             route_url = (str(server_url) + "plan?" + # Add Plan request to server url
                 "fromPlace=" + str(source_feature[startlat_field]) + "," + str(source_feature[startlon_field]) +
                 "&toPlace=" + str(source_feature[endlat_field]) + "," + str(source_feature[endlon_field]) +
-                "&mode=" + str(travelmode) +
-                "&date=" + str(source_feature[date_field].toString('yyyy-MM-dd')) +
-                "&time=" + str(source_feature[time_field].toString('HH:mm:ss')) +
+                "&mode=" + travelmode +
+                "&date=" + use_date +
+                "&time=" + use_time +
                 "&numItineraries=" + str(iterinaries) +
-                "&optimize=" + str(traveloptimize) +
+                "&optimize=" + traveloptimize +
                 additional_params # Additional Parameters entered as OTP-Readable string -> User responsibility
             )
             
