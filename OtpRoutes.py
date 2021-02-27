@@ -281,8 +281,14 @@ class OtpRoutes(QgsProcessingAlgorithm):
                             route_error_bool = True
                             route_errorid = route_data['error']['id']
                             route_errordescription = route_data['error']['msg']
-                            route_errormessage = route_data['error']['message']
-                            route_errornopath = route_data['error']['noPath']
+                            try: # not every error delivers this
+                                route_errormessage = route_data['error']['message']
+                            except:
+                                pass
+                            try: # not every error delivers this
+                                route_errornopath = route_data['error']['noPath']
+                            except:
+                                pass
                         except:
                             route_error = 'Success'
                             route_error_bool = False
@@ -296,9 +302,13 @@ class OtpRoutes(QgsProcessingAlgorithm):
                 route_error = 'Error: Requesting the route failed'
                 route_error_bool = True
             
-            if not route_data['plan']['itineraries']: # check if response is empty
-                route_error = 'Error: Empty response route'
-                route_error_bool = True
+            #print(route_error)
+            try:
+                if not route_data['plan']['itineraries']: # check if response is empty
+                    route_error = 'Error: Empty response route'
+                    route_error_bool = True
+            except:
+                pass
                 
             #print(route_data)
             # Reading response
