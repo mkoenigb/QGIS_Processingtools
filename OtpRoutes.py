@@ -90,10 +90,10 @@ class OtpRoutes(QgsProcessingAlgorithm):
                 self.ENDLON_FIELD, self.tr('Field containing Longitude of Endpoint'),'EndLon','SOURCE_LYR'))
         self.addParameter(
             QgsProcessingParameterField(
-                self.DATE_FIELD, self.tr('Field containing Date of Tripstart'),'Startdate','SOURCE_LYR'))
+                self.DATE_FIELD, self.tr('Field containing Date of Tripstart (or Tripend)'),'Startdate','SOURCE_LYR'))
         self.addParameter(
             QgsProcessingParameterField(
-                self.TIME_FIELD, self.tr('Field containing Time of Tripstart'),'Starttime','SOURCE_LYR'))
+                self.TIME_FIELD, self.tr('Field containing Time of Tripstart (or Tripend)'),'Starttime','SOURCE_LYR'))
         self.addParameter(
             QgsProcessingParameterEnum(
                 self.MODE, self.tr('Travelmode for Routes'),
