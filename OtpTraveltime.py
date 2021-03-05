@@ -1,7 +1,7 @@
 # Author: Mario Königbauer
 # License: GNU General Public License v3.0
-# Version 1.0.1
-# Date: 2021-03-05
+# Version 1.0
+# Date: 2021-03-04
 # Tested with: QGIS 3.4.15 and QGIS 3.18.0 (recommend 3.18, as at least 3.4 crashes sometimes without any reason or error message, but works on the same data and same settings perfectly when trying another time)
 
 from PyQt5.QtCore import QCoreApplication, QVariant, QDate, QTime, QDateTime, Qt
@@ -16,44 +16,7 @@ import urllib.request
 import urllib
 import json
 
-class OtpRoutes(QgsProcessingAlgorithm):
-    
-    # Source: https://stackoverflow.com/a/33557535/8947209 (slightly modified)
-    def decode_polyline(self, polyline_str):
-        index, lat, lng = 0, 0, 0
-        #coordinates = []
-        pointlist = []
-        changes = {'latitude': 0, 'longitude': 0}
-    
-        # Coordinates have variable length when encoded, so just keep
-        # track of whether we've hit the end of the string. In each
-        # while loop iteration, a single coordinate is decoded.
-        while index < len(polyline_str):
-            # Gather lat/lon changes, store them in a dictionary to apply them later
-            for unit in ['latitude', 'longitude']: 
-                shift, result = 0, 0
-
-                while True:
-                    byte = ord(polyline_str[index]) - 63
-                    index+=1
-                    result |= (byte & 0x1f) << shift
-                    shift += 5
-                    if not byte >= 0x20:
-                        break
-
-                if (result & 1):
-                    changes[unit] = ~(result >> 1)
-                else:
-                    changes[unit] = (result >> 1)
-
-            lat += changes['latitude']
-            lng += changes['longitude']
-            
-            qgspointgeom = QgsPoint(float(lng / 100000.0),float(lat / 100000.0))
-            pointlist.append(qgspointgeom)
-
-            #coordinates.append((lat / 100000.0, lng / 100000.0)) # original code, but we dont need a tuple of coords, only the qgspoints
-        return pointlist    
+class OtpTraveltime(QgsProcessingAlgorithm):
     
     SERVER_URL = 'SERVER_URL'
     SOURCE_LYR = 'SOURCE_LYR'
@@ -79,22 +42,22 @@ class OtpRoutes(QgsProcessingAlgorithm):
                 self.SOURCE_LYR, self.tr('Sourcelayer'), [QgsProcessing.TypeMapLayer], defaultValue='otp_testdata'))
         self.addParameter(
             QgsProcessingParameterField(
-                self.STARTLAT_FIELD, self.tr('Field containing Latitude of Startpoint'),'StartLat','SOURCE_LYR'))
+                self.STARTLAT_FIELD, self.tr('Field containing Latitude of Startpoint'),'Start_Lat','SOURCE_LYR'))
         self.addParameter(
             QgsProcessingParameterField(
-                self.STARTLON_FIELD, self.tr('Field containing Longitude of Startpoint'),'StartLon','SOURCE_LYR'))
+                self.STARTLON_FIELD, self.tr('Field containing Longitude of Startpoint'),'Start_Lon','SOURCE_LYR'))
         self.addParameter(
             QgsProcessingParameterField(
-                self.ENDLAT_FIELD, self.tr('Field containing Latitude of Endpoint'),'EndLat','SOURCE_LYR'))
+                self.ENDLAT_FIELD, self.tr('Field containing Latitude of Endpoint'),'End_Lat','SOURCE_LYR'))
         self.addParameter(
             QgsProcessingParameterField(
-                self.ENDLON_FIELD, self.tr('Field containing Longitude of Endpoint'),'EndLon','SOURCE_LYR'))
+                self.ENDLON_FIELD, self.tr('Field containing Longitude of Endpoint'),'End_Lon','SOURCE_LYR'))
         self.addParameter(
             QgsProcessingParameterField(
-                self.DATE_FIELD, self.tr('Field containing Date of Tripstart (or Tripend)'),'Startdate','SOURCE_LYR'))
+                self.DATE_FIELD, self.tr('Field containing Date of Tripstart (or Tripend)'),'Start_date','SOURCE_LYR'))
         self.addParameter(
             QgsProcessingParameterField(
-                self.TIME_FIELD, self.tr('Field containing Time of Tripstart (or Tripend)'),'Starttime','SOURCE_LYR'))
+                self.TIME_FIELD, self.tr('Field containing Time of Tripstart (or Tripend)'),'Start_time','SOURCE_LYR'))
         self.addParameter(
             QgsProcessingParameterEnum(
                 self.MODE, self.tr('Travelmode for Routes'),
@@ -111,7 +74,7 @@ class OtpRoutes(QgsProcessingAlgorithm):
                 self.ITERINARIES, self.tr('Number of Iterinaries'),type=0,defaultValue=1,minValue=1))
         self.addParameter(
             QgsProcessingParameterFeatureSink(
-                self.OUTPUT, self.tr('OTP Routes'))) # Output
+                self.OUTPUT, self.tr('OTP Traveltime'))) # Output
                 
 
         
@@ -141,7 +104,6 @@ class OtpRoutes(QgsProcessingAlgorithm):
         n_source_fields = source_layer.fields().count()
         
         fieldlist = [ # Master for attributes and varnames
-            QgsField("Route_LegID",QVariant.Int),
             QgsField("Route_RouteID", QVariant.Int),
             QgsField("Route_RelationID", QVariant.Int),
             QgsField("Route_From", QVariant.String), # !
@@ -164,31 +126,7 @@ class OtpRoutes(QgsProcessingAlgorithm):
             QgsField("Route_To_EndTime", QVariant.DateTime),
             QgsField("Route_Total_Mode", QVariant.String),
             QgsField("Route_Total_Duration", QVariant.Int),
-            QgsField("Route_Total_Distance", QVariant.Double),
-            QgsField("Route_Total_TransitTime", QVariant.Int),
-            QgsField("Route_Total_WaitingTime", QVariant.Int),
-            QgsField("Route_Total_WalkTime", QVariant.Int),
-            QgsField("Route_Total_WalkDistance", QVariant.Double),
             QgsField("Route_Total_Transfers", QVariant.Int),
-            QgsField("Route_Leg_StartTime", QVariant.DateTime),
-            QgsField("Route_Leg_DepartureDelay", QVariant.Int),
-            QgsField("Route_Leg_EndTime", QVariant.DateTime),
-            QgsField("Route_Leg_ArrivalDelay", QVariant.Int),
-            QgsField("Route_Leg_Duration", QVariant.Int),
-            QgsField("Route_Leg_Distance", QVariant.Double),
-            QgsField("Route_Leg_Mode", QVariant.String),
-            QgsField("Route_Leg_From_Lat", QVariant.Double, len=4, prec=8),
-            QgsField("Route_Leg_From_Lon", QVariant.Double, len=4, prec=8),
-            QgsField("Route_Leg_From_StopId", QVariant.String),
-            QgsField("Route_Leg_From_StopCode", QVariant.String),
-            QgsField("Route_Leg_From_Name", QVariant.String),
-            QgsField("Route_Leg_From_Departure", QVariant.DateTime),
-            QgsField("Route_Leg_To_Lat", QVariant.Double, len=4, prec=8),
-            QgsField("Route_Leg_To_Lon", QVariant.Double, len=4, prec=8),
-            QgsField("Route_Leg_To_StopId", QVariant.String),
-            QgsField("Route_Leg_To_StopCode", QVariant.String),
-            QgsField("Route_Leg_To_Name", QVariant.String),
-            QgsField("Route_Leg_To_Arrival", QVariant.DateTime)
             ]
         for field in fieldlist:
             fields.append(field) # add fields from the list
@@ -200,14 +138,11 @@ class OtpRoutes(QgsProcessingAlgorithm):
             fieldindexdict[fieldindexcounter] = x # assign index as key and fieldname as value
             if '_url' in x:
                 fieldindex_position_of_last_alwaysneededfield = fieldindexcounter
-            if 'route_total_distance' in x:
-                fieldindex_position_of_routetotaldistance = fieldindexcounter
             fieldindexcounter += 1
         len_fieldindexdict = len(fieldindexdict)
         
         
         # Counter
-        route_legid = 0
         route_routeid = 0
         route_relationid = 0
         route_from = ''
@@ -216,19 +151,12 @@ class OtpRoutes(QgsProcessingAlgorithm):
         notavailableint = None #0
         notavailableothers = None
         
-        # Pseudopointlist for errors in decode polyline
-        errorlinegeom = []
-        errorlinegeomp1 = QgsPoint(float(-0.1),float(0.0))
-        errorlinegeom.append(errorlinegeomp1)
-        errorlinegeomp2 = QgsPoint(float(0.1),float(0.0))
-        errorlinegeom.append(errorlinegeomp2)
-        
         # some general settings
         route_headers = {"accept":"application/json"} # this plugin only works for json responses
         
         (sink, dest_id) = self.parameterAsSink(parameters, self.OUTPUT, context,
-                                               fields, 2, # 2 = wkbType LineString
-                                               QgsCoordinateReferenceSystem('EPSG:4326'))
+                                               fields, source_layer.wkbType(),
+                                               source_layer.sourceCrs())
                                                
         for current, source_feature in enumerate(source_layer.getFeatures()): # iterate over source
         
@@ -354,6 +282,7 @@ class OtpRoutes(QgsProcessingAlgorithm):
                 # loop through iterinaries    
                 for iter in route_data['plan']['itineraries']: 
                     route_routeid += 1
+                    new_feature = QgsFeature(fields)
                     try:
                         route_from_starttime = iter['startTime']
                         route_from_starttime = datetime.fromtimestamp(int(route_from_starttime)/1000)
@@ -392,137 +321,22 @@ class OtpRoutes(QgsProcessingAlgorithm):
                         route_total_transfers = iter['transfers']
                     except:
                         route_total_transfers = notavailableint
-                    #print('From lat: ' + str(route_total_duration))
                     
-                    # loop through legs --> they will become the features of our layer
-                    route_leg_totaldistcounter = 0 # set to 0 on start of each new route
-                    for leg in iter['legs']: 
-                        route_legid += 1
-                        new_feature = QgsFeature(fields)
-                        
-                        try:
-                            route_leg_starttime = leg['startTime']
-                            route_leg_starttime = datetime.fromtimestamp(int(route_leg_starttime)/1000)
-                            route_leg_starttime = QDateTime.fromString(str(route_leg_starttime),'yyyy-MM-dd hh:mm:ss')
-                        except:
-                            route_leg_starttime = notavailableothers
-                        try:
-                            route_leg_departuredelay = leg['departureDelay']
-                        except:
-                            route_leg_departuredelay = notavailableint
-                        try:
-                            route_leg_endtime = leg['endTime']
-                            route_leg_endtime = datetime.fromtimestamp(int(route_leg_endtime)/1000)
-                            route_leg_endtime = QDateTime.fromString(str(route_leg_endtime),'yyyy-MM-dd hh:mm:ss')
-                        except:
-                            route_leg_endtime = notavailableothers
-                        try:
-                            route_leg_arrivaldelay = leg['arrivalDelay']
-                        except:
-                            route_leg_arrivaldelay = notavailableint
-                        try:
-                            route_leg_duration = leg['duration']
-                        except:
-                            route_leg_duration = notavailableint
-                        try:
-                            route_leg_distance = leg['distance']
-                            #route_total_distance += route_leg_distance # Field does not exist in response. Build sum of all legs
-                            route_total_distance = None
-                        except:
-                            route_leg_distance = notavailableint
-                            #route_total_distance += 0 # Field does not exist in response.....
-                        try:
-                            route_leg_mode = leg['mode']
-                        except:
-                            route_leg_mode = notavailablestring
-                        try:
-                            route_leg_from_lat = leg['from']['lat']
-                            route_leg_from_lon = leg['from']['lon']
-                        except:
-                            route_leg_from_lat = notavailableint
-                            route_leg_from_lon = notavailableint
-                        try:
-                            route_leg_from_stopid = leg['from']['stopId']
-                        except:
-                            route_leg_from_stopid = notavailablestring
-                        try:
-                            route_leg_from_stopcode = leg['from']['stopCode']
-                        except:
-                            route_leg_from_stopcode = notavailablestring
-                        try:
-                            route_leg_from_name = leg['from']['name']
-                        except:
-                            route_leg_from_name = notavailablestring
-                        try:
-                            route_leg_from_departure = leg['from']['departure']
-                            route_leg_from_departure = datetime.fromtimestamp(int(route_leg_from_departure)/1000)
-                            route_leg_from_departure = QDateTime.fromString(str(route_leg_from_departure),'yyyy-MM-dd hh:mm:ss')
-                        except:
-                            route_leg_from_departure = notavailableothers
-                        try:
-                            route_leg_to_lat = leg['to']['lat']
-                            route_leg_to_lon = leg['to']['lon']
-                        except:
-                            route_leg_to_lat = notavailableint
-                            route_leg_to_lon = notavailableint
-                        try:
-                            route_leg_to_stopid = leg['to']['stopId']
-                        except:
-                            route_leg_to_stopid = notavailablestring
-                        try:
-                            route_leg_to_stopcode = leg['to']['stopCode']
-                        except:
-                            route_leg_to_stopcode = notavailablestring
-                        try:
-                            route_leg_to_name = leg['to']['name']
-                        except:
-                            route_leg_to_name = notavailablestring
-                        try:
-                            route_leg_to_arrival = leg['to']['arrival']
-                            route_leg_to_arrival = datetime.fromtimestamp(int(route_leg_to_arrival)/1000)
-                            route_leg_to_arrival = QDateTime.fromString(str(route_leg_to_arrival),'yyyy-MM-dd hh:mm:ss')
-                        except:
-                            route_leg_to_arrival = notavailableothers
-                        
-                        try:
-                            route_leg_encodedpolylinestring = leg['legGeometry']['points']
-                            route_leg_decodedpolylinestring_aspointlist = self.decode_polyline(route_leg_encodedpolylinestring)
-                            new_feature.setGeometry(QgsGeometry.fromPolyline(route_leg_decodedpolylinestring_aspointlist))
-                        except:
-                            new_feature.setGeometry(QgsGeometry.fromPolyline(errorlinegeom))
-                            route_error = 'Error: Decoding route geometry failed'
-                        
-                        # Adding the attributes to resultlayer
-                        for key, value in fieldindexdict.items(): # keys contain the fieldindex, values the variablename which is the same as the fieldname, just in lowercase
-                            fieldindex = key
-                            if key < n_source_fields: # Copy source attributes from source layer
-                                fieldvalue = source_feature[fieldindex] # source_feature = sourcelayer-feature, new_feature = new feature
-                            else: # Get the leg attributes from variables
-                                fieldvalue = locals()[value] # variables are named exactly as the fieldnames, just lowercase, we adjusted that before
-                            new_feature.setAttribute(fieldindex,fieldvalue)
-                        sink.addFeature(new_feature, QgsFeatureSink.FastInsert) # add feature to the output
-                        route_leg_totaldistcounter += 1 # counting the number of legs of a route
-                        # END OF LOOP legs
-                        
-                    # Update total distance here since it is the sum of all legs and not available in response jsons
-                    #attr_totaldistance = { fieldindex_position_of_routetotaldistance : route_total_distance } # only change totaldistance field, we get its position while building the dict
-                    #last_featureid_totaldistance = new_feature.id() # the last featureid of a route = current feature
-                    #first_featureid_totaldistance = last_featureid_totaldistance - route_leg_totaldistcounter + 1 # the first featureid of a route
-                    #print('last: ' + str(last_featureid_totaldistance))
-                    #print('first: ' + str(first_featureid_totaldistance))
-                    #for features_before in range(first_featureid_totaldistance,last_featureid_totaldistance): # loop through all legs of the current route
-                        #new_feature.setAttribute(fieldindex_position_of_routetotaldistance,route_total_distance)
-                        #dings = new_feature.id(features_before)
-                        #dings.setAttribute(fieldindex_position_of_routetotaldistance,route_total_distance)
-                        #new_feature.id(features_before)[fieldindex_position_of_routetotaldistance] = route_total_distance
-                        #print(new_feature.id(features_before))
-                        #routes_memorylayer_pr.changeAttributeValues({ features_before : attr_totaldistance }) # add the leg-sum of all legs of a route as totaldistance
+                    new_feature.setGeometry(source_feature.geometry())
+                    # Adding the attributes to resultlayer
+                    for key, value in fieldindexdict.items(): # keys contain the fieldindex, values the variablename which is the same as the fieldname, just in lowercase
+                        fieldindex = key
+                        if key < n_source_fields: # Copy source attributes from source layer
+                            fieldvalue = source_feature[fieldindex] # source_feature = sourcelayer-feature, new_feature = new feature
+                        else: # Get the leg attributes from variables
+                            fieldvalue = locals()[value] # variables are named exactly as the fieldnames, just lowercase, we adjusted that before
+                        new_feature.setAttribute(fieldindex,fieldvalue)
+                    sink.addFeature(new_feature, QgsFeatureSink.FastInsert) # add feature to the output
                     # END OF LOOP iterinaries
                     
-                # END OF if route_error_bool == False
+            # END OF if route_error_bool == False
             else: # Create error-dummyfeature if no route has been returned
                 route_routeid += 1
-                route_legid += 1
                 new_feature = QgsFeature(fields)
                 try:
                     route_errorid = route_data['error']['id']
@@ -541,8 +355,7 @@ class OtpRoutes(QgsProcessingAlgorithm):
                 except:
                     route_errornopath = notavailablestring
                 
-                # Create dummy-geometry
-                new_feature.setGeometry(QgsGeometry.fromPolyline(errorlinegeom))
+                new_feature.setGeometry(source_feature.geometry())
                 # Adding the attributes to resultlayer
                 for key, value in fieldindexdict.items(): # keys contain the fieldindex, values the variablename which is the same as the fieldname, just in lowercase
                     fieldindex = key
@@ -573,13 +386,13 @@ class OtpRoutes(QgsProcessingAlgorithm):
         return QCoreApplication.translate('Processing', string)
 
     def createInstance(self):
-        return OtpRoutes()
+        return OtpTraveltime()
 
     def name(self):
-        return 'OtpRoutes'
+        return 'OtpTraveltime'
 
     def displayName(self):
-        return self.tr('OpenTripPlanner Routes')
+        return self.tr('OpenTripPlanner Traveltime')
 
     def group(self):
         return self.tr('OpenTripPlanner')
@@ -588,4 +401,4 @@ class OtpRoutes(QgsProcessingAlgorithm):
         return 'otp'
 
     def shortHelpString(self):
-        return self.tr('This Tool requests routes from an OTP instance based on a layer and returns its geometry and attributes')
+        return self.tr('This Tool requests routes from an OTP instance based on a layer and creates a new layer, duplicated from the source (geometry and attributes), and adds a few attributes like total duration and transfers')
