@@ -67,9 +67,8 @@ class NearestAttributComparison(QgsProcessingAlgorithm):
         total = 100.0 / layer.featureCount() if layer.featureCount() else 0 # Initialize progress for progressbar
         
         # if -1 has been chosen for maximum features to compare, use the amount of features of the layer, else use the given input
-        totalfeatcount = layer.featureCount()
         if maxneighbors == -1:
-            maxneighbors = totalfeatcount
+            maxneighbors = layer.featureCount()
         
         fields = layer.fields() # get all fields of the inputlayer
         fields.append(QgsField("near_id", idfield_type)) # create new field with same type as the inputfield
@@ -89,7 +88,9 @@ class NearestAttributComparison(QgsProcessingAlgorithm):
                 new_feat[attridx] = attr # copy attribute values over to the new layer
                 attridx += 1 # go to the next field
             new_feat.setGeometry(feat.geometry()) # copy over the geometry of the source feature
-            for near in idx.nearestNeighbor(feat.geometry(), neighbors=maxneighbors, maxDistance=maxdistance): # for each feature iterate over the nearest ones
+            nearestneighbors = idx.nearestNeighbor(feat.geometry(), neighbors=maxneighbors, maxDistance=maxdistance) # get the featureids of the maximum specified number of nearest neighbors within a maximum distance
+            nearestneighbors.remove(feat.id()) # remove the current feature from this list (otherwise the nearest feature by == operator would always be itself...)
+            for near in nearestneighbors: # for each feature iterate over the nearest ones
                 if op_func(layer.getFeature(near)[attrfield], feat[attrfield]): # if the current nearest attribute is ? than the current feature ones, then
                     new_feat['near_id'] = layer.getFeature(near)[idfield] # get the near featureid and fill the current feature with its value
                     new_feat['near_attr'] = layer.getFeature(near)[attrfield] # also get the attribute value of this near feature
