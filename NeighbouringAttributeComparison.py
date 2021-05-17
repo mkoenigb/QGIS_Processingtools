@@ -2,8 +2,8 @@
 # License: GNU General Public License v3.0
 
 from PyQt5.QtCore import QCoreApplication, QVariant
-from qgis.core import (QgsSpatialIndex, QgsRectangle, QgsProcessingParameterFeatureSink, QgsFeatureSink, QgsField, QgsFeature, QgsProcessing, QgsExpression, QgsGeometry, QgsPoint, QgsFields, QgsWkbTypes, QgsStringUtils,
-                       QgsProcessingAlgorithm, QgsProcessingParameterField, QgsProcessingParameterVectorLayer, QgsProcessingOutputVectorLayer, QgsProcessingParameterEnum, QgsProcessingParameterString, QgsProcessingParameterNumber)
+from qgis.core import (QgsSpatialIndex, QgsProcessingParameterFeatureSink, QgsFeatureSink, QgsField, QgsFields, QgsFeature, QgsGeometry, QgsPoint, QgsWkbTypes, 
+                       QgsProcessingAlgorithm, QgsProcessingParameterField, QgsProcessingParameterVectorLayer, QgsProcessingOutputVectorLayer, QgsProcessingParameterEnum, QgsProcessingParameterNumber)
 import operator
 
 class NearestAttributComparison(QgsProcessingAlgorithm):
@@ -89,7 +89,10 @@ class NearestAttributComparison(QgsProcessingAlgorithm):
                 attridx += 1 # go to the next field
             new_feat.setGeometry(feat.geometry()) # copy over the geometry of the source feature
             nearestneighbors = idx.nearestNeighbor(feat.geometry(), neighbors=maxneighbors, maxDistance=maxdistance) # get the featureids of the maximum specified number of nearest neighbors within a maximum distance
-            nearestneighbors.remove(feat.id()) # remove the current feature from this list (otherwise the nearest feature by == operator would always be itself...)
+            try:
+                nearestneighbors.remove(feat.id()) # remove the current feature from this list (otherwise the nearest feature by == operator would always be itself...)
+            except:
+                pass # ignore on error
             for near in nearestneighbors: # for each feature iterate over the nearest ones
                 if op_func(layer.getFeature(near)[attrfield], feat[attrfield]): # if the current nearest attribute is ? than the current feature ones, then
                     new_feat['near_id'] = layer.getFeature(near)[idfield] # get the near featureid and fill the current feature with its value
