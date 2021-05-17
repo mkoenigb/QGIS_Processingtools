@@ -22,20 +22,20 @@ class NearNeighborAttributeByAttributeComparison(QgsProcessingAlgorithm):
                 self.SOURCE_LYR, self.tr('Source Layer'))) # Take any source layer
         self.addParameter(
             QgsProcessingParameterField(
-                self.SOURCE_FIELD, self.tr('Attribute field containing unique IDs'),'id','SOURCE_LYR')) # Choose the Trigger field of the source layer, default if exists is 'Trigger'
+                self.SOURCE_FIELD, self.tr('Attribute field containing unique IDs'),'id','SOURCE_LYR'))
         self.addParameter(
             QgsProcessingParameterField(
-                self.ATTRIBUTE_FIELD, self.tr('Attribute field for comparison'),'year','SOURCE_LYR')) # Choose the Trigger field of the source layer, default if exists is 'Trigger'        
+                self.ATTRIBUTE_FIELD, self.tr('Attribute field for comparison'),'year','SOURCE_LYR'))
         self.addParameter(
             QgsProcessingParameterNumber(
-                self.MAX_NEIGHBORS, self.tr('Maximum number of nearest neighbors to compare (use -1 to compare all features of the layer)'),defaultValue=1000,minValue=-1,maxValue=10000000))
+                self.MAX_NEIGHBORS, self.tr('Maximum number of nearest neighbors to compare (use -1 to compare all features of the layer)'),defaultValue=1000,minValue=-1))
         self.addParameter(
             QgsProcessingParameterNumber(
-                self.MAX_DISTANCE, self.tr('Maximum distance of nearest neighbors to compare'),defaultValue=10000,minValue=0,maxValue=10000000))
+                self.MAX_DISTANCE, self.tr('Maximum distance of nearest neighbors to compare'),defaultValue=10000,minValue=0))
         self.addParameter(
             QgsProcessingParameterEnum(
                 self.OPERATOR, self.tr('Operator to compare the attribute value (If attribute is of type string, only == and != do work)'),
-                    ['<','<=','==','!=','>=','>'],defaultValue=[2]))
+                    ['<','<=','==','!=','>=','>'],defaultValue=0))
         self.addParameter(
             QgsProcessingParameterFeatureSink(
                 self.OUTPUT, self.tr('Near Neighbor Attributes'))) # Output
@@ -88,14 +88,14 @@ class NearNeighborAttributeByAttributeComparison(QgsProcessingAlgorithm):
                 new_feat[attridx] = attr # copy attribute values over to the new layer
                 attridx += 1 # go to the next field
             new_feat.setGeometry(feat.geometry()) # copy over the geometry of the source feature
-            nearestneighbors = idx.nearestNeighbor(feat.geometry(), neighbors=maxneighbors, maxDistance=maxdistance) # get the featureids of the maximum specified number of nearest neighbors within a maximum distance
+            nearestneighbors = idx.nearestNeighbor(feat.geometry(), neighbors=maxneighbors, maxDistance=maxdistance) # get the featureids of the maximum specified number of near neighbors within a maximum distance
             try:
                 nearestneighbors.remove(feat.id()) # remove the current feature from this list (otherwise the nearest feature by == operator would always be itself...)
             except:
                 pass # ignore on error
-            for near in nearestneighbors: # for each feature iterate over the nearest ones
-                if op_func(layer.getFeature(near)[attrfield], feat[attrfield]): # if the current nearest attribute is ? than the current feature ones, then
-                    new_feat['near_id'] = layer.getFeature(near)[idfield] # get the near featureid and fill the current feature with its value
+            for near in nearestneighbors: # for each feature iterate over the nearest ones (the index is already sorted by distance, so the first match will be the nearest match)
+                if op_func(layer.getFeature(near)[attrfield], feat[attrfield]): # if the current nearest attribute is (chosen operator here) than the current feature ones, then
+                    new_feat['near_id'] = layer.getFeature(near)[idfield] # get the near matchs's id value and fill the current feature with its value
                     new_feat['near_attr'] = layer.getFeature(near)[attrfield] # also get the attribute value of this near feature
                     new_feat['near_dist'] = feat.geometry().distance(layer.getFeature(near).geometry()) # and finally calculate the distance between the current feature and the nearest matching feature
                     break # break the for loop of near features and continue with the next feat
@@ -107,7 +107,6 @@ class NearNeighborAttributeByAttributeComparison(QgsProcessingAlgorithm):
                 break
 
         return {self.OUTPUT: dest_id} # Return result of algorithm
-
 
     def tr(self, string):
         return QCoreApplication.translate('Processing', string)
