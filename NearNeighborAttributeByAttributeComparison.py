@@ -99,12 +99,12 @@ class NearNeighborAttributeByAttributeComparison(QgsProcessingAlgorithm):
                 new_feat[attridx] = attr # copy attribute values over to the new layer
                 attridx += 1 # go to the next field
             new_feat.setGeometry(feat.geometry()) # copy over the geometry of the source feature
-            nearestneighbors = idx.nearestNeighbor(feat.geometry(), neighbors=maxneighbors, maxDistance=maxdistance) # get the featureids of the maximum specified number of near neighbors within a maximum distance
-            try:
-                nearestneighbors.remove(feat.id()) # remove the current feature from this list (otherwise the nearest feature by == operator would always be itself...)
-            except:
-                pass # ignore on error
             if ((not(op_func(feat[attrfield], donotcomparevalue))) or (not donotcomparebool)): # only search for matches if not beeing told to not do to so
+                nearestneighbors = idx.nearestNeighbor(feat.geometry(), neighbors=maxneighbors, maxDistance=maxdistance) # get the featureids of the maximum specified number of near neighbors within a maximum distance
+                try:
+                    nearestneighbors.remove(feat.id()) # remove the current feature from this list (otherwise the nearest feature by == operator would always be itself...)
+                except:
+                    pass # ignore on error
                 for near in nearestneighbors: # for each feature iterate over the nearest ones (the index is already sorted by distance, so the first match will be the nearest match)
                     if op_func(layer.getFeature(near)[attrfield], feat[attrfield]): # if the current nearest attribute is (chosen operator here) than the current feature ones, then
                         new_feat['near_id'] = layer.getFeature(near)[idfield] # get the near matchs's id value and fill the current feature with its value
