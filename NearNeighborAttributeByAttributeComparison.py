@@ -1,9 +1,10 @@
 # Author: Mario Königbauer
 # License: GNU General Public License v3.0
+# V1.3
 
 from PyQt5.QtCore import QCoreApplication, QVariant
 from qgis.core import (QgsSpatialIndex, QgsProcessingParameterFeatureSink, QgsFeatureSink, QgsField, QgsFields, QgsFeature, QgsGeometry, QgsPoint, QgsWkbTypes, 
-                       QgsProcessingAlgorithm, QgsProcessingParameterField, QgsProcessingParameterVectorLayer, QgsProcessingOutputVectorLayer, QgsProcessingParameterEnum, QgsProcessingParameterNumber)
+                       QgsProcessingAlgorithm, QgsProcessingParameterField, QgsProcessingParameterBoolean, QgsProcessingParameterVectorLayer, QgsProcessingOutputVectorLayer, QgsProcessingParameterEnum, QgsProcessingParameterNumber)
 import operator
 
 class NearNeighborAttributeByAttributeComparison(QgsProcessingAlgorithm):
@@ -12,6 +13,8 @@ class NearNeighborAttributeByAttributeComparison(QgsProcessingAlgorithm):
     ATTRIBUTE_FIELD = 'ATTRIBUTE_FIELD'
     MAX_NEIGHBORS = 'MAX_NEIGHBORS'
     MAX_DISTANCE = 'MAX_DISTANCE'
+    DONOT_COMPARE_VALUE = 'DONOT_COMPARE_VALUE'
+    DONOT_COMPARE_BOOL = 'DONOT_COMPARE_BOOL'
     OPERATOR = 'OPERATOR'
     OUTPUT = 'OUTPUT'
 
@@ -31,11 +34,17 @@ class NearNeighborAttributeByAttributeComparison(QgsProcessingAlgorithm):
                 self.MAX_NEIGHBORS, self.tr('Maximum number of nearest neighbors to compare (use -1 to compare all features of the layer)'),defaultValue=1000,minValue=-1))
         self.addParameter(
             QgsProcessingParameterNumber(
-                self.MAX_DISTANCE, self.tr('Maximum distance of nearest neighbors to compare'),defaultValue=10000,minValue=0))
+                self.MAX_DISTANCE, self.tr('Only take nearest neighbors within this maximum distance into account for comparison'),defaultValue=10000,minValue=0))
         self.addParameter(
             QgsProcessingParameterEnum(
                 self.OPERATOR, self.tr('Operator to compare the attribute value (If attribute is of type string, only == and != do work)'),
                     ['<','<=','==','!=','>=','>'],defaultValue=0))
+        self.addParameter(
+            QgsProcessingParameterNumber(
+                self.DONOT_COMPARE_VALUE, self.tr('Do not search for matches on features having a value (insert chosen operator here) x \n Only works for numerical values and dependent on the chosen operator. \n Typically this should be the max or min value available in the attributes and therefore there cant be a match.'),defaultValue=0))
+        self.addParameter(
+            QgsProcessingParameterBoolean(
+                self.DONOT_COMPARE_BOOL,self.tr('Check this Box to actually use the previous option ("Do not search for matches on ....")'),defaultValue=0))
         self.addParameter(
             QgsProcessingParameterFeatureSink(
                 self.OUTPUT, self.tr('Near Neighbor Attributes'))) # Output
@@ -51,10 +60,12 @@ class NearNeighborAttributeByAttributeComparison(QgsProcessingAlgorithm):
         attrfield_type = layer.fields()[attrfield_index].type() # get the fieldtype of this field
         maxneighbors = self.parameterAsDouble(parameters, self.MAX_NEIGHBORS, context)
         maxdistance = self.parameterAsDouble(parameters, self.MAX_DISTANCE, context)
+        donotcomparevalue = self.parameterAsDouble(parameters, self.DONOT_COMPARE_VALUE, context)
+        donotcomparebool = self.parameterAsBool(parameters, self.DONOT_COMPARE_BOOL, context)
         op = self.parameterAsString(parameters, self.OPERATOR, context)
         op = int(op[0]) # get the index of the chosen operator
         #import operator
-        ops = { # get the operator by the index
+        ops = { # get the operator by this index
             0: operator.lt,
             1: operator.le,
             2: operator.eq,
@@ -93,12 +104,15 @@ class NearNeighborAttributeByAttributeComparison(QgsProcessingAlgorithm):
                 nearestneighbors.remove(feat.id()) # remove the current feature from this list (otherwise the nearest feature by == operator would always be itself...)
             except:
                 pass # ignore on error
-            for near in nearestneighbors: # for each feature iterate over the nearest ones (the index is already sorted by distance, so the first match will be the nearest match)
-                if op_func(layer.getFeature(near)[attrfield], feat[attrfield]): # if the current nearest attribute is (chosen operator here) than the current feature ones, then
-                    new_feat['near_id'] = layer.getFeature(near)[idfield] # get the near matchs's id value and fill the current feature with its value
-                    new_feat['near_attr'] = layer.getFeature(near)[attrfield] # also get the attribute value of this near feature
-                    new_feat['near_dist'] = feat.geometry().distance(layer.getFeature(near).geometry()) # and finally calculate the distance between the current feature and the nearest matching feature
-                    break # break the for loop of near features and continue with the next feat
+            if ((not(op_func(feat[attrfield], donotcomparevalue))) or (not donotcomparebool)): # only search for matches if not beeing told to not do to so
+                for near in nearestneighbors: # for each feature iterate over the nearest ones (the index is already sorted by distance, so the first match will be the nearest match)
+                    if op_func(layer.getFeature(near)[attrfield], feat[attrfield]): # if the current nearest attribute is (chosen operator here) than the current feature ones, then
+                        new_feat['near_id'] = layer.getFeature(near)[idfield] # get the near matchs's id value and fill the current feature with its value
+                        new_feat['near_attr'] = layer.getFeature(near)[attrfield] # also get the attribute value of this near feature
+                        new_feat['near_dist'] = feat.geometry().distance(layer.getFeature(near).geometry()) # and finally calculate the distance between the current feature and the nearest matching feature
+                        break # break the for loop of near features and continue with the next feat
+            else: # do not search for near neighbor matches if given value is (operator here) than x
+                pass # do nothing and continue adding the feature
                     
             sink.addFeature(new_feat, QgsFeatureSink.FastInsert) # add feature to the output
             feedback.setProgress(int(current * total)) # Set Progress in Progressbar
