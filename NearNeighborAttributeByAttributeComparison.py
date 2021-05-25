@@ -146,5 +146,6 @@ class NearNeighborAttributeByAttributeComparison(QgsProcessingAlgorithm):
         '- x nearest neighbors \n'
         '- within a given maximum distance \n'
         'of the current feature and compares a given attribute. \n'
-        'If this comparison returns true, it adds the id, and the attribute of this neighbor to the current feature as well as the distance to this neighbor'
+        'If this comparison returns true, it adds the id, and the attribute of this neighbor to the current feature as well as the distance to this neighbor. \n \n '
+        'Further explanations available on https://gis.stackexchange.com/a/396856/107424'
         )
