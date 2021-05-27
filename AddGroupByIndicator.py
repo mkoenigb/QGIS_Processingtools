@@ -8,6 +8,7 @@ from qgis.core import (QgsField, QgsFeature, QgsProcessing, QgsExpression, QgsGe
 
 class AddGroupByIndicator(QgsProcessingAlgorithm):
     SOURCE_LYR = 'SOURCE_LYR'
+    ORDER_FIELD = 'ORDER_FIELD'
     TRIGGER_FIELD = 'TRIGGER_FIELD'
     GROUP_IDFIELD = 'GROUP_IDFIELD'
     INDICATOR_VALUE = 'INDICATOR_VALUE'
@@ -18,6 +19,9 @@ class AddGroupByIndicator(QgsProcessingAlgorithm):
         self.addParameter(
             QgsProcessingParameterFeatureSource(
                 self.SOURCE_LYR, self.tr('Source'))) # Take any source layer
+        self.addParameter(
+            QgsProcessingParameterField(
+                self.ORDER_FIELD, self.tr('Field the layer should be ordered by'),'Date','SOURCE_LYR'))
         self.addParameter(
             QgsProcessingParameterField(
                 self.TRIGGER_FIELD, self.tr('Trigger Field indicating a new Group'),'Trigger','SOURCE_LYR')) # Choose the Trigger field of the source layer, default if exists is 'Trigger'
@@ -34,6 +38,7 @@ class AddGroupByIndicator(QgsProcessingAlgorithm):
     def processAlgorithm(self, parameters, context, feedback):
         # Get Parameters and assign to variable to work with
         source_layer = self.parameterAsLayer(parameters, self.SOURCE_LYR, context)
+        orderbyfield = self.parameterAsString(parameters, self.ORDER_FIELD, context)
         triggerfield = self.parameterAsString(parameters, self.TRIGGER_FIELD, context)
         groupfieldname = self.parameterAsString(parameters, self.GROUP_IDFIELD, context)
         newlineindicator = self.parameterAsInt(parameters, self.INDICATOR_VALUE, context)
@@ -48,8 +53,13 @@ class AddGroupByIndicator(QgsProcessingAlgorithm):
         (sink, dest_id) = self.parameterAsSink(parameters, self.OUTPUT, context,
                                                fields, source_layer.wkbType(),
                                                source_layer.sourceCrs())
-                                               
-        for current, feat in enumerate(source_layer.getFeatures()): # iterate over source 
+        
+        # order the layer
+        order_by_clause = QgsFeatureRequest.OrderBy([QgsFeatureRequest.OrderByClause(orderbyfield, ascending=True)])
+        feature_request = QgsFeatureRequest()
+        request = QgsFeatureRequest().setOrderBy(order_by_clause)
+        
+        for current, feat in enumerate(source_layer.getFeatures(request)): # iterate over source 
             if feat[triggerfield] == newlineindicator: # if trigger appears increase groupcounter
                 groupid += 1
             new_feat = QgsFeature(fields) # copy source fields + appended
