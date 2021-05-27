@@ -56,7 +56,6 @@ class AddGroupByIndicator(QgsProcessingAlgorithm):
         
         # order the layer
         order_by_clause = QgsFeatureRequest.OrderBy([QgsFeatureRequest.OrderByClause(orderbyfield, ascending=True)])
-        feature_request = QgsFeatureRequest()
         request = QgsFeatureRequest().setOrderBy(order_by_clause)
         
         for current, feat in enumerate(source_layer.getFeatures(request)): # iterate over source 
