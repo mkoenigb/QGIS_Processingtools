@@ -90,8 +90,8 @@ class CountPointsInPolygonByTime(QgsProcessingAlgorithm):
                     point = lyr_points.getFeature(pointid)
                     if feedback.isCanceled():
                         break
-                    if point.geometry().intersects(polygon.geometry()):
-                        if point[fld_time] >= current_start_datetime and point[fld_time] <= current_end_datetime:
+                    if point[fld_time] >= current_start_datetime and point[fld_time] <= current_end_datetime:
+                        if point.geometry().intersects(polygon.geometry()):
                             new_feat['pointcount'] += 1
                             idx_points.deleteFeature(point) # dont count a point twice, removing it from the index speeds up the code around 25%
                         
