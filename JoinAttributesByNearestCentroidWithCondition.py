@@ -98,7 +98,6 @@ class JoinAttributesByNearestCentroidWithCondition(QgsProcessingAlgorithm):
         if join_fields:
             join_layer = join_layer.materialize(QgsFeatureRequest().setSubsetOfAttributes(join_fields, join_layer.fields()))
         join_layer_fields = join_layer.fields()
-        print(join_layer_fields)
         output_layer_fields = source_layer_fields
         for join_layer_field in join_layer.fields():
             output_layer_fields.append(QgsField(join_prefix + join_layer_field.name(), join_layer_field.type()))
@@ -137,11 +136,6 @@ class JoinAttributesByNearestCentroidWithCondition(QgsProcessingAlgorithm):
                 if matches_found_counter >= join_n:
                     break
                 join_feat = join_layer.getFeature(join_feat_id)
-                #print(source_feat[source_field])
-                #print(op)
-                #print(join_feat[join_field])
-                #print(op(source_feat[source_field], join_feat[join_field]))
-                #print('\n')
                 if op is None:
                     matches_found_counter += 1
                     new_feat = QgsFeature(output_layer_fields)
