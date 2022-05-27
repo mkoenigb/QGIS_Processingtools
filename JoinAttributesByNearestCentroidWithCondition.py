@@ -1,0 +1,206 @@
+# Author: Mario Königbauer
+# License: GNU General Public License v3.0
+
+import operator, processing
+from PyQt5.QtCore import QCoreApplication, QVariant
+from qgis.core import (QgsField, QgsFeature, QgsProcessing, QgsExpression, QgsSpatialIndex,
+                       QgsFeatureSink, QgsFeatureRequest, QgsProcessingAlgorithm,
+                       QgsProcessingParameterFeatureSink, QgsProcessingParameterField, QgsProcessingParameterFeatureSource, QgsProcessingParameterEnum, QgsProcessingParameterExpression, QgsProcessingParameterNumber, QgsProcessingParameterString)
+
+class JoinAttributesByNearestCentroidWithCondition(QgsProcessingAlgorithm):
+    SOURCE_LYR = 'SOURCE_LYR'
+    SOURCE_FIELD = 'SOURCE_FIELD'
+    SOURCE_EXPRESSION = 'SOURCE_EXPRESSION'
+    JOIN_LYR = 'JOIN_LYR'
+    JOIN_FIELDS = 'JOIN_FIELDS'
+    JOIN_FIELD = 'JOIN_FIELD'
+    JOIN_EXPRESSION = 'JOIN_EXPRESSION'
+    OPERATION = 'OPERATION'
+    JOIN_N = 'JOIN_N'
+    JOIN_DIST = 'JOIN_DIST'
+    JOIN_PREFIX = 'JOIN_PREFIX'
+    OUTPUT = 'OUTPUT'
+
+    def initAlgorithm(self, config=None):
+        
+        self.addParameter(
+            QgsProcessingParameterFeatureSource(
+                self.SOURCE_LYR, self.tr('Source Layer')))
+        self.addParameter(
+            QgsProcessingParameterExpression(
+                self.SOURCE_EXPRESSION, self.tr('Filter-Expression for Source-Layer'), parentLayerParameterName = 'SOURCE_LYR', optional = True))
+        self.addParameter(
+            QgsProcessingParameterFeatureSource(
+                self.JOIN_LYR, self.tr('Join Layer')))
+        self.addParameter(
+            QgsProcessingParameterExpression(
+                self.JOIN_EXPRESSION, self.tr('Filter-Expression for Join-Layer'), parentLayerParameterName = 'JOIN_LYR', optional = True))
+        self.addParameter(
+            QgsProcessingParameterField(
+                self.JOIN_FIELDS, self.tr('Add the following fields of join layer to result (if none are chosen, all fields will be added)'),parentLayerParameterName='JOIN_LYR', allowMultiple = True, optional = True))
+        self.addParameter(
+            QgsProcessingParameterNumber(
+                self.JOIN_N, self.tr('Join x nearest neighbors'), type = 0, defaultValue = 3, minValue = 1, maxValue = 2147483647))
+        self.addParameter(
+            QgsProcessingParameterNumber(
+                self.JOIN_DIST, self.tr('Maximum join distance (0 means unlimited)'), type = 1, defaultValue = 0, minValue = 0, maxValue = 2147483647))
+        self.addParameter(
+            QgsProcessingParameterString(
+                self.JOIN_PREFIX, self.tr('Join Prefix'), defaultValue = 'join_'))
+        self.addParameter(
+            QgsProcessingParameterField(
+                self.SOURCE_FIELD, self.tr('Source Layer compare Field'),parentLayerParameterName='SOURCE_LYR', optional = True))
+        self.addParameter(
+            QgsProcessingParameterEnum(
+                self.OPERATION, self.tr('Comparison operator'), [None,'!=','=','<','>','<=','>=','is','not','is not'], defaultValue = 0, allowMultiple = False))
+        self.addParameter(
+            QgsProcessingParameterField(
+                self.JOIN_FIELD, self.tr('Join Layer compare Field'),parentLayerParameterName='JOIN_LYR', optional = True))
+        self.addParameter(
+            QgsProcessingParameterFeatureSink(
+                self.OUTPUT, self.tr('Joined Layer')))
+
+    def processAlgorithm(self, parameters, context, feedback):
+        # Get Parameters
+        source_layer = self.parameterAsSource(parameters, self.SOURCE_LYR, context)
+        source_field = self.parameterAsFields(parameters, self.SOURCE_FIELD, context)
+        if source_field:
+            source_field = source_field[0]
+        join_layer = self.parameterAsLayer(parameters, self.JOIN_LYR, context)
+        join_field = self.parameterAsFields(parameters, self.SOURCE_FIELD, context)
+        if join_field:
+            join_field = join_field[0]
+        join_fields = self.parameterAsFields(parameters, self.JOIN_FIELDS, context)
+        operation = self.parameterAsInt(parameters, self.OPERATION, context)
+        ops = { # get the operator by this index
+            0: None,
+            1: operator.ne,
+            2: operator.eq,
+            3: operator.lt,
+            4: operator.gt,
+            5: operator.le,
+            6: operator.ge,
+            7: operator.is_,
+            8: operator.not_,
+            9: operator.is_not
+            }
+        op = ops[operation]
+        source_expression = self.parameterAsExpression(parameters, self.SOURCE_EXPRESSION, context)
+        source_expression = QgsExpression(source_expression)
+        join_expression = self.parameterAsExpression(parameters, self.JOIN_EXPRESSION, context)
+        join_expression = QgsExpression(join_expression)
+        join_n = self.parameterAsInt(parameters, self.JOIN_N, context)
+        join_dist = self.parameterAsDouble(parameters, self.JOIN_DIST, context)
+        join_prefix = self.parameterAsString(parameters, self.JOIN_PREFIX, context)
+
+
+        source_layer_fields = source_layer.fields()
+        if join_fields:
+            join_layer = join_layer.materialize(QgsFeatureRequest().setSubsetOfAttributes(join_fields, join_layer.fields()))
+        join_layer_fields = join_layer.fields()
+        print(join_layer_fields)
+        output_layer_fields = source_layer_fields
+        for join_layer_field in join_layer.fields():
+            output_layer_fields.append(QgsField(join_prefix + join_layer_field.name(), join_layer_field.type()))
+        output_layer_fields.append(QgsField(join_prefix + 'dist', QVariant.Double, len=20, prec=5))
+        
+        (sink, dest_id) = self.parameterAsSink(parameters, self.OUTPUT, context,
+                                               output_layer_fields, source_layer.wkbType(),
+                                               source_layer.sourceCrs())
+        
+        if source_expression not in (QgsExpression(''),QgsExpression(None)):
+            source_layer = source_layer.materialize(QgsFeatureRequest(source_expression))
+        if join_expression not in (QgsExpression(''),QgsExpression(None)):
+            join_layer = join_layer.materialize(QgsFeatureRequest(join_expression))
+        
+        total = 100.0 / source_layer.featureCount() if source_layer.featureCount() else 0
+        
+        if source_layer.sourceCrs() != join_layer.sourceCrs():
+            reproject_params = {'INPUT': join_layer, 'TARGET_CRS': source_layer.sourceCrs(), 'OUTPUT': 'memory:Reprojected'}
+            reproject_result = processing.run('native:reprojectlayer', reproject_params)
+            join_layer = reproject_result['OUTPUT']
+            
+        join_layer_idx = QgsSpatialIndex(join_layer.getFeatures())
+        
+        for current, source_feat in enumerate(source_layer.getFeatures()):
+            if feedback.isCanceled():
+                break
+            matches_found_counter = 0
+            source_feat_centroid = source_feat.geometry().centroid()
+            
+            if op is None:
+                nearest_neighbors = join_layer_idx.nearestNeighbor(source_feat_centroid, neighbors = join_n, maxDistance = join_dist)
+            else:
+                nearest_neighbors = join_layer_idx.nearestNeighbor(source_feat_centroid, neighbors = -1, maxDistance = join_dist)
+            
+            for join_feat_id in nearest_neighbors:
+                if matches_found_counter >= join_n:
+                    break
+                join_feat = join_layer.getFeature(join_feat_id)
+                #print(source_feat[source_field])
+                #print(op)
+                #print(join_feat[join_field])
+                #print(op(source_feat[source_field], join_feat[join_field]))
+                #print('\n')
+                if op is None:
+                    matches_found_counter += 1
+                    new_feat = QgsFeature(output_layer_fields)
+                    new_feat.setGeometry(source_feat.geometry())
+                    attridx = 0
+                    for attr in source_feat.attributes():
+                        new_feat[attridx] = attr
+                        attridx += 1
+                    for attr in join_feat.attributes():
+                        new_feat[attridx] = attr
+                        attridx += 1
+                    new_feat[join_prefix + 'dist'] = source_feat_centroid.distance(join_feat.geometry())
+                    sink.addFeature(new_feat, QgsFeatureSink.FastInsert)
+                elif op(source_feat[source_field], join_feat[join_field]):
+                    matches_found_counter += 1
+                    new_feat = QgsFeature(output_layer_fields)
+                    new_feat.setGeometry(source_feat.geometry())
+                    attridx = 0
+                    for attr in source_feat.attributes():
+                        new_feat[attridx] = attr
+                        attridx += 1
+                    for attr in join_feat.attributes():
+                        new_feat[attridx] = attr
+                        attridx += 1
+                    new_feat[join_prefix + 'dist'] = source_feat_centroid.distance(join_feat.geometry())
+                    sink.addFeature(new_feat, QgsFeatureSink.FastInsert)
+                
+            if matches_found_counter == 0:
+                new_feat = QgsFeature(output_layer_fields)
+                new_feat.setGeometry(source_feat.geometry())
+                attridx = 0
+                for attr in source_feat.attributes():
+                    new_feat[attridx] = attr
+                    attridx += 1
+                sink.addFeature(new_feat, QgsFeatureSink.FastInsert)
+                    
+            feedback.setProgress(int(current * total))
+            
+
+        return {self.OUTPUT: dest_id}
+
+
+    def tr(self, string):
+        return QCoreApplication.translate('Processing', string)
+
+    def createInstance(self):
+        return JoinAttributesByNearestCentroidWithCondition()
+
+    def name(self):
+        return 'JoinAttributesByNearestCentroidWithCondition'
+
+    def displayName(self):
+        return self.tr('Join attributes by nearest centroid with condition')
+
+    def group(self):
+        return self.tr('FROM GISSE')
+
+    def groupId(self):
+        return 'from_gisse'
+
+    def shortHelpString(self):
+        return self.tr('This Algorithm finds the x nearest neighbors (centroids) by a given condition and joins them.')
