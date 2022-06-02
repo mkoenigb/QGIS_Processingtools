@@ -101,7 +101,7 @@ class JoinAttributesByNearestWithCondition(QgsProcessingAlgorithm):
         
         sourcejoinlayerequal = False
         if join_n == 0:
-            join_n = float('inf')
+            join_n =  2147483647 # float('inf') produces OverflowError: argument 'neighbors' overflowed: value must be in the range -2147483648 to 2147483647
         if self.parameterAsLayer(parameters, self.SOURCE_LYR, context) == self.parameterAsLayer(parameters, self.JOIN_LYR, context):
             join_n += 1
             sourcejoinlayerequal = True
